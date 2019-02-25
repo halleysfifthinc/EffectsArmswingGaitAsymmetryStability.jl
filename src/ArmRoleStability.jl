@@ -125,7 +125,7 @@ Base.min(x::Number, ::Nothing) = x
 function rom(x::AbstractVector{T}, events::AbstractVector{<:Integer}) where {T}
     l = length(events) - 1
     E = Array{T}(undef, l, 2)
-    _rangedextrema(E, x, events, l)
+    _rangedextrema!(E, x, events, l)
 
     roms = diff(E; dims=2)
 
@@ -137,8 +137,8 @@ end
 
 function avgextrema(x::AbstractVector{T}, events::AbstractVector{<:Integer}) where {T}
     l = length(events) - 1
-    E = = Array{T}(undef, l, 2)
-    _rangedextrema(E, x, events, l)
+    E = Array{T}(undef, l, 2)
+    _rangedextrema!(E, x, events, l)
 
     # ma = mean(@view(E[:,2]))
     # mi = mean(@view(E[:,1]))
