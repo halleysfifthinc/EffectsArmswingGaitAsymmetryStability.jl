@@ -1,4 +1,4 @@
-module ArmRoleStability
+module SteadyStateStability
 
 using Biomechanics, MAT, ChaosTools, Interpolations, UnsafeArrays, DSP
 
@@ -9,17 +9,17 @@ export readsegment,
        readsstrials,
        analyzetrial
 
-export DSArmRole,
-       ArmRoleSeg
+export DSSteadyState,
+       SteadyStateSeg
 
-abstract type DSArmRole <: AbstractDataSource end
+abstract type DSSteadyState <: AbstractDataSource end
 
-struct ArmRoleSeg <: DSArmRole
+struct SteadyStateSeg <: DSSteadyState
     events::Dict{Symbol,Vector{Float64}}
     data::Dict{Symbol,Matrix{Float64}}
 end
 
-ArmRoleSeg() = ArmRoleSeg(Dict{Symbol,Matrix}(), Dict{Symbol,AbstractVector}())
+SteadyStateSeg() = SteadyStateSeg(Dict{Symbol,Matrix}(), Dict{Symbol,AbstractVector}())
 
 function readsegment(DSData::Type{<:AbstractDataSource},
                      trial::Trial{<:AbstractDataSource},
@@ -100,7 +100,7 @@ function readsstrials(rootdir::String, subs=1:15)
             conds[:sym] = Symbol(m[:sym])
             conds[:arms] = Symbol(m[:arms])
 
-            push!(sstrials, Trial{DSArmRole}(sub, splitext(basename(trial))[1], trial, conds))
+            push!(sstrials, Trial{DSSteadyState}(sub, splitext(basename(trial))[1], trial, conds))
         end
     end
 
@@ -162,7 +162,7 @@ asymmetry(l,r) = abs(log(min(l,r)/max(l,r)))*100
 
 function analyzetrial(trial::Trial, numstrides::Int)
     cols = [ "TrunkLinVel", "TrunkAngVel", "RFootPos", "LFootPos", "LHip", "RHip", "LShoulder", "RShoulder" ]
-    seg = readsegment(ArmRoleSeg, trial, 25.0; events=[:RFC, :LFC], ts=cols)
+    seg = readsegment(SteadyStateSeg, trial, 25.0; events=[:RFC, :LFC], ts=cols)
     insuffstrerr = "insufficient number of strides in trial $(trial.name), subject $(trial.subject)"
     length(seg.data.events[:RFC]) < numstrides+1 && throw(ArgumentError(insuffstrerr))
 

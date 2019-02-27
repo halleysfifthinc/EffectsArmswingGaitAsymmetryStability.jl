@@ -1,4 +1,4 @@
-name = "ArmRoleStability"
+name = "SteadyStateStability"
 uuid = "b29caa31-27d5-5c34-88cc-b1476f7df19a"
 authors = ["Allen Hill <allenofthehills@gmail.com>"]
 version = "0.1.0"
