@@ -6,7 +6,7 @@ using Biomechanics, MAT, ChaosTools, Interpolations, UnsafeArrays, DSP
 using Statistics, DelimitedFiles, LinearAlgebra
 
 export readsegment,
-       readsstrials,
+       readtrials,
        analyzetrial
 
 export DSSteadyState,
@@ -77,37 +77,40 @@ end
 
 const fs = 100
 
-function readsstrials(rootdir::String, subs=1:15)
-    genV3D = joinpath(rootdir, "data", "generated", "ARMS_STAB")
-
-    trialnames = [  sym*"-"*arms for sym in ["sym", "asym"] for arms in ["none", "norm", "excess"] ].*".mat"
-
+function readtrials(datadir::String)
     sstrials = Vector{Trial}()
 
-    for sub in subs
-        subj = lpad(sub, 2, '0')
-        pref = joinpath(genV3D, "Subject $subj", "export", "steady-state")
-        subtrials = readdir(pref)
-        filter!(subtrials) do file
-            basename(file) ∈ trialnames
-        end
+    fp = abspath(datadir)
 
-        subtrials .= joinpath.(pref, subtrials)
+    trials = readdir(datadir)
+    filter!(trial -> endswith(trial, "mat"), trials)
 
-        for trial in subtrials
-            conds = Dict{Symbol, Symbol}()
-            m = match(r"[\\,\/](?<sym>(sym|asym))-(?<arms>(none|norm|excess))", trial)
-            conds[:sym] = Symbol(m[:sym])
-            conds[:arms] = Symbol(m[:arms])
+    for trial in trials
+        conds = Dict{Symbol, Symbol}()
+        m = match(r"S(?<sub>\d{1,2})_(?<arms>(held|norm|active))_(?<sym>(sym|asym))", trial)
+        sub = tryparse(Int, m[:sub])
+        conds[:sym] = Symbol(m[:sym])
+        conds[:arms] = Symbol(m[:arms])
 
-            push!(sstrials, Trial{DSSteadyState}(sub, splitext(basename(trial))[1], trial, conds))
-        end
+        push!(sstrials, Trial{DSSteadyState}(sub, splitext(basename(trial))[1], joinpath(fp, trial), conds))
     end
 
     return sstrials
 end
 
-# Lamb and Stöckl 2014 doi:10.1016/j.clinbiomech.2014.03.008
+"""
+    continuousphase(θ, events) -> Vector
+
+Calculate the continuous phase of `θ` by finding the angle of the Hilbert transform of the
+amplitude centered signal, `θ`. The amplitude centering uses the average extrema between
+pairs of `events`.
+
+This method of continuous phase calculation is as recommended by Lamb and Stöckl (2014) [1]
+
+[1] P. F. Lamb and M. Stöckl, “On the use of continuous relative phase: Review of current 
+    approaches and outline for a new standard,” Clinical Biomechanics, vol. 29, no. 5,
+    pp. 484–493, May 2014, [doi](https://doi.org/10.1016%2Fj.clinbiomech.2014.03.008).
+"""
 function continuousphase(θ, events::AbstractVector{<:Integer})
     mi, ma = avgextrema(θ, events)
     θcent = θ .- Ref(mi) .- Ref((ma - mi)/2)
@@ -116,32 +119,34 @@ function continuousphase(θ, events::AbstractVector{<:Integer})
     return angle.(Hθ)
 end
 
-# Minor type-piracy
-Base.:*(::Nothing, ::Number) = nothing
-Base.:-(::Nothing, ::Number) = nothing
-Base.min(::Nothing, x::Number) = x
-Base.min(x::Number, ::Nothing) = x
+"""
+    meanrange(x, events) -> Tuple(avg, std)
 
-function rom(x::AbstractVector{T}, events::AbstractVector{<:Integer}) where {T}
+Find the average range and range variability of `x` for the set of all intervals given by
+`events`.
+"""
+function meanrange(x::AbstractVector{T}, events::AbstractVector{<:Integer}) where {T}
     l = length(events) - 1
     E = Array{T}(undef, l, 2)
     _rangedextrema!(E, x, events, l)
 
     roms = diff(E; dims=2)
 
-    avgrom = mean(roms)
-    stdrom = std(roms)
+    avg = mean(roms)
+    sd = std(roms)
 
-    (avgrom, stdrom)
+    (avg, sd)
 end
 
+"""
+    avgextrema(x, events) -> Tuple(min, max)
+
+Find the average minima and maxima for the set of all intervals given by `events`.
+"""
 function avgextrema(x::AbstractVector{T}, events::AbstractVector{<:Integer}) where {T}
     l = length(events) - 1
     E = Array{T}(undef, l, 2)
     _rangedextrema!(E, x, events, l)
-
-    # ma = mean(@view(E[:,2]))
-    # mi = mean(@view(E[:,1]))
 
     avgex = mean(E; dims=1)
 
@@ -150,7 +155,7 @@ end
 
 function _rangedextrema!(E, x, events, l)
     @inbounds for i in 1:l
-        GC.@preserve x begin
+        GC.@preserve E x events i begin
             E[i,1], E[i,2] = extrema(uview(x, events[i]:(events[i+1]-1)))
         end
     end
@@ -158,7 +163,45 @@ function _rangedextrema!(E, x, events, l)
 end
 
 # Asymmetry function (see Plotnik et al. 2005 doi:10.1002/ana.20452)
-asymmetry(l,r) = abs(log(min(l,r)/max(l,r)))*100
+"""
+    asymmetry(l,r)
+
+Calculate the asymmetry between `l` and `r` using the equation used by Plotnik et al. (2005)
+[1].
+
+[1] M. Plotnik, N. Giladi, Y. Balash, C. Peretz, and J. M. Hausdorff, “Is freezing of gait
+    in Parkinson’s disease related to asymmetric motor function?,” Ann Neurol., vol. 57, 
+    no. 5, pp. 656–663, May 2005 [doi](https://doi.org/10.1002%2Fana.20452).
+"""
+asymmetry(l,r) = abs(log(l/r))*100
+
+"""
+    circmean(x)
+
+Compute the circular mean of `x` in radians.
+
+[1] N. I. Fisher, Statistical Analysis of Circular Data. Cambridge University Press, 1993.
+"""
+function circmean(x)
+    s = mean(sin, x)
+    c = mean(cos, x)
+
+    atan(s, c)
+end
+
+"""
+    circstd(x)
+
+Compute the circular standard deviation of `x` in radians.
+
+[1] N. I. Fisher, Statistical Analysis of Circular Data. Cambridge University Press, 1993.
+"""
+function circstd(x)
+    s = mean(sin, x)
+    c = mean(cos, x)
+
+    sqrt(-2*log(hypot(c, s)))
+end
 
 function analyzetrial(trial::Trial, numstrides::Int)
     cols = [ "TrunkLinVel", "TrunkAngVel", "RFootPos", "LFootPos", "LHip", "RHip", "LShoulder", "RShoulder" ]
@@ -175,47 +218,48 @@ function analyzetrial(trial::Trial, numstrides::Int)
     # Gather rfc and lfc info into a NamedTuple, with named fields `time`, `pos`, and `leg`, (`:RFC` or `:LFC`)
     rfc = [ (time=seg.data.events[:RFC][i],
              pos=SVector{2}(seg.data.data[:RFootPos][
-                    round(Int, seg.data.events[:RFC][i]*fs)
-                    ,1:2]),
+                            round(Int, seg.data.events[:RFC][i]*fs)
+                            ,1:2]),
              leg=:RFC) for i in 1:(numstrides+1) ]
     if seg.data.events[:LFC][1] < seg.data.events[:RFC][1]
         lfc = [ (time=seg.data.events[:LFC][i],
                  pos=SVector{2}(seg.data.data[:LFootPos][
-                        round(Int, seg.data.events[:LFC][i]*fs)
-                        ,1:2]),
+                                round(Int, seg.data.events[:LFC][i]*fs)
+                                ,1:2]),
                  leg=:LFC) for i in 2:(numstrides+2) ]
     else
         lfc = [ (time=seg.data.events[:LFC][i],
                  pos=SVector{2}(seg.data.data[:LFootPos][
-                        round(Int, seg.data.events[:LFC][i]*fs)
-                        ,1:2]),
+                                round(Int, seg.data.events[:LFC][i]*fs)
+                                ,1:2]),
                  leg=:LFC) for i in 1:(numstrides+1) ]
     end
 
-    # Sort all steps and check that they are alternating--no double steps--and that they are in the expected locations:
-    # Odd elements need to be RFC for later assumptions made on whether the odd/even elements of the diff are right or left steps
+    # Sort all steps and check that they are alternating--no double steps--and that they are
+    # in the expected locations:
+    # Odd elements need to be RFC for later assumptions made on whether the odd/even elements
+    # of the diff are right or left steps
     steps = sort([rfc; lfc], by=(x -> x.time))
 
-    while any(x -> x.leg === :LFC, steps[isodd.(axes(steps, 1))])
-        badstep = min(findfirst(x -> x.leg === :LFC, steps[isodd.(axes(steps, 1))])*2-1,
-                      findfirst(x -> x.leg === :RFC, steps[iseven.(axes(steps, 1))])*2)
+    while any(x -> x.leg === :LFC, steps[1:2:end])
+        badstep = min(something(findfirst(x -> x.leg === :LFC, steps[1:2:end]), typemax(Int)÷2)*2-1,
+                      something(findfirst(x -> x.leg === :RFC, steps[2:2:end]), typemax(Int)÷2)*2)
         steps = deleteat!(steps, badstep)
     end
-    all(x -> x.leg === :RFC, steps[isodd.(axes(steps, 1))]) || throw(DomainError("Odd elements aren't all RFC's"))
-    all(x -> x.leg === :LFC, steps[iseven.(axes(steps, 1))]) || throw(DomainError("Even elements aren't all LFC's"))
+    all(x -> x.leg === :RFC, steps[1:2:end]) || throw(DomainError("Odd elements aren't all RFC's"))
+    all(x -> x.leg === :LFC, steps[2:2:end]) || throw(DomainError("Even elements aren't all LFC's"))
 
     ########################################
     ## Gait variability
     ########################################
 
     # After `diff`ing, odd elements will be left steps, even elements will be right steps
-
     steptimes = diff(getindex.(steps, :time))
     if trial.conds[:sym] == :asym
-        # The speed of the treadmill belt for the planted foot is added to the distance between successive steps
-        # e.g. For the left step, the right foot is planted, therefore the effective AP distance traveled by the
-        # left foot is speed of the right treadmill belt plus the absolute distance between the right and left
-        # footstrikes
+        # The speed of the treadmill belt for the planted foot is added to the distance 
+        # between successive steps e.g. For the left step, the right foot is planted,
+        # therefore the effective AP distance traveled by the left foot is speed of the right
+        # treadmill belt plus the absolute distance between the right and left footstrikes
         stepcoords = diff(getindex.(steps, :pos)) .+
                         ( isodd(i) ? SVector{2}(0.0, 0.96*steptimes[i]) : SVector{2}(0.0, 1.2*steptimes[i])
                          for i in 1:(length(steps)-1) )
@@ -225,11 +269,11 @@ function analyzetrial(trial::Trial, numstrides::Int)
     end
 
     # Spatial and temporal step descriptives
-    left_stepcoords = stepcoords[isodd.(axes(stepcoords,1))]
+    left_stepcoords = stepcoords[1:2:end] # Odd elements
     left_steplavg = mean(abs.(getindex.(left_stepcoords,2)))
     left_steplstd = std(abs.(getindex.(left_stepcoords,2)))
 
-    right_stepcoords = stepcoords[iseven.(axes(stepcoords,1))]
+    right_stepcoords = stepcoords[2:2:end] # Even elements
     right_steplavg = mean(abs.(getindex.(right_stepcoords,2)))
     right_steplstd = std(abs.(getindex.(right_stepcoords,2)))
 
@@ -239,8 +283,8 @@ function analyzetrial(trial::Trial, numstrides::Int)
     results[:right_steplavg] = right_steplavg
     results[:right_steplstd] = right_steplstd
 
-    left_avgsteptime = mean(steptimes[isodd.(axes(steptimes,1))])
-    right_avgsteptime = mean(steptimes[iseven.(axes(steptimes,1))])
+    left_avgsteptime = mean(steptimes[1:2:end]) # Odd elements
+    right_avgsteptime = mean(steptimes[2:2:end]) # Even elements
 
     # Asymmetry indices
     results[:stepasym_spatial] = asymmetry(left_steplavg, right_steplavg)
@@ -262,8 +306,8 @@ function analyzetrial(trial::Trial, numstrides::Int)
     lsho_θ = seg.data.data[:LShoulder][1:end-1,1]
 
     # ROM and swing asymmetry
-    rsho_avgrom, rsho_stdrom = rom(rsho_θ, rfc)
-    lsho_avgrom, lsho_stdrom = rom(lsho_θ, rfc)
+    rsho_avgrom, rsho_stdrom = meanrange(rsho_θ, rfc)
+    lsho_avgrom, lsho_stdrom = meanrange(lsho_θ, rfc)
     results[:swingasym] = asymmetry(lsho_avgrom, rsho_avgrom)
 
     results[:rsho_avgrom] = rsho_avgrom
@@ -279,29 +323,17 @@ function analyzetrial(trial::Trial, numstrides::Int)
 
     # The subtraction of the two angles has the possibility of introducing discontinuties (which
     # will interfere with the interpolation of the time normalizing)
-    crp_lsho_rhip = Unwrap.unwrap(rhip_crp; range=2pi) - Unwrap.unwrap(lsho_crp; range=2pi)
-    crp_rsho_lhip = Unwrap.unwrap(lhip_crp; range=2pi) - Unwrap.unwrap(rsho_crp; range=2pi)
+    crp_lsho_rhip = unwrap(rhip_crp; range=2pi) - unwrap(lsho_crp; range=2pi)
+    crp_rsho_lhip = unwrap(lhip_crp; range=2pi) - unwrap(rsho_crp; range=2pi)
 
     norm_crp_lsho_rhip = timenormalize(crp_lsho_rhip, rfc)
     norm_crp_rsho_lhip = timenormalize(crp_rsho_lhip, rfc)
 
-    # Circular SD (Fisher 1993)
-    S = sum(sin.(reshape(norm_crp_lsho_rhip, 100, numstrides)); dims=2)./numstrides
-    C = sum(cos.(reshape(norm_crp_lsho_rhip, 100, numstrides)); dims=2)./numstrides
-    sdcrp_lsho_rhip = map((c, s) -> sqrt(-2*log(sqrt(c^2 + s^2))), C, S)
+    sdcrp_lsho_rhip = circstd.(eachrow(reshape(norm_crp_lsho_rhip, 100, numstrides)))
+    msdcrp_lsho_rhip = circmean(sdcrp_lsho_rhip)
 
-    # Circular mean (Fisher 1993)
-    s = sum(sin.(sdcrp_lsho_rhip))/numstrides
-    c = sum(cos.(sdcrp_lsho_rhip))/numstrides
-    msdcrp_lsho_rhip = atan(s, c)
-
-    S = sum(sin.(reshape(norm_crp_rsho_lhip, 100, numstrides)); dims=2)./numstrides
-    C = sum(cos.(reshape(norm_crp_rsho_lhip, 100, numstrides)); dims=2)./numstrides
-    sdcrp_rsho_lhip = map((c, s) -> sqrt(-2*log(sqrt(c^2 + s^2))), C, S)
-
-    s = sum(sin.(sdcrp_rsho_lhip ))/numstrides
-    c = sum(cos.(sdcrp_rsho_lhip ))/numstrides
-    msdcrp_rsho_lhip = atan(s, c)
+    sdcrp_rsho_lhip = circstd.(eachrow(reshape(norm_crp_rsho_lhip, 100, numstrides)))
+    msdcrp_rsho_lhip = circmean(sdcrp_rsho_lhip)
 
     results[:msdcrp_lsho_rhip] = rad2deg(msdcrp_lsho_rhip)
     results[:msdcrp_rsho_lhip] = rad2deg(msdcrp_rsho_lhip)
