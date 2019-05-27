@@ -1,14 +1,10 @@
 # SteadyStateStability
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/halleysfifthinc/SteadyStateStability.jl/master)
-
 This repository contains the Julia code, Jupyter notebook, and dataset used in the study "The effects of arm swing amplitude and lower-limb asymmetry on gait stability" by Allen Hill and Julie Nantel.
 
 ## Instructions
 
 To run this analysis on your computer, both Julia and Jupyter Notebook must be available. Julia can be downloaded from [the Julia website](https://julialang.org/downloads/), and Jupyter can be installed from within Julia (in the REPL) with `] add IJulia`; alternate instructions for installing Jupyter can be found on the [IJulia github](https://github.com/JuliaLang/IJulia.jl) or the [Jupyter homepage](https://jupyter.org/install).
-
-Alternatively, this analysis can be reproduced online using the binder link at the top.
 
 ## Description of data
 
