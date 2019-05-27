@@ -3,6 +3,9 @@ uuid = "b29caa31-27d5-5c34-88cc-b1476f7df19a"
 authors = ["Allen Hill <allenofthehills@gmail.com>"]
 version = "0.1.0"
 
+[compat]
+julia = "1.1"
+
 [deps]
 Biomechanics = "6f07b801-2c6f-57cd-b605-0571f3a6b84e"
 ChaosTools = "608a59af-f2a3-5ad4-90b4-758bdf3122a7"
