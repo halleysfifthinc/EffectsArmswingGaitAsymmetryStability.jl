@@ -4,7 +4,9 @@ This repository contains the Julia code, Jupyter notebook, and dataset used in t
 
 ## Instructions
 
-To run this analysis on your computer, both Julia and Jupyter Notebook must be available. Julia can be downloaded from [the Julia website](https://julialang.org/downloads/), and Jupyter can be installed from within Julia (in the REPL) with `] add IJulia`; alternate instructions for installing Jupyter can be found on the [IJulia github](https://github.com/JuliaLang/IJulia.jl) or the [Jupyter homepage](https://jupyter.org/install).
+To run this analysis on your computer, both Julia and Jupyter Notebook must be available. A version of Julia appropriate for your OS can be downloaded from [the Julia website](https://julialang.org/downloads/), and Jupyter can be installed from within Julia (in the REPL) with `] add IJulia`; alternate instructions for installing Jupyter can be found on the [IJulia github](https://github.com/JuliaLang/IJulia.jl) or the [Jupyter homepage](https://jupyter.org/install) (not recommended).
+
+From within the main repository directory, start Julia and then start Jupyter in the Julia REPL (`using IJulia; notebook(;dir=pwd())`, or if using a system Jupyter installation, start Jupyter from your favorite available shell (e.g. Powershell on Windows, bash on any \*nix variant, etc.). In Jupyter, open the `Analysis.ipynb` notebook. Running all cells will reproduce the results and sole figure of the above mentioned paper.
 
 ## Description of data
 
