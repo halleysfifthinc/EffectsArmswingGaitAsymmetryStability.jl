@@ -1,4 +1,4 @@
-module SteadyStateStability
+module EffectsArmswingGaitAsymmetryStability
 
 using Biomechanics, MAT, ChaosTools, Interpolations, UnsafeArrays, DSP
 

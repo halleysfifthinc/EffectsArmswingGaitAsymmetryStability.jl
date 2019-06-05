@@ -1,4 +1,4 @@
-# SteadyStateStability
+# EffectsArmswingGaitAsymmetryStability.jl
 
 This repository contains the Julia code, Jupyter notebook, and dataset used in the study "The effects of arm swing amplitude and lower-limb asymmetry on gait stability" by Allen Hill and Julie Nantel.
 
